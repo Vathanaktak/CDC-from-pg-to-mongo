@@ -1,0 +1,50 @@
+services:
+  zookeeper:
+    image: quay.io/debezium/zookeeper:2.7
+    ports: ["2181:2181"]
+
+  kafka:
+    image: quay.io/debezium/kafka:2.7
+    depends_on: [zookeeper]
+    ports: ["9092:9092"]
+    environment:
+      ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx1g"
+
+  postgres:
+    image: quay.io/debezium/postgres:16   # wal_level=logical already enabled
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: demo
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+
+  connect:
+    build: ./connect          # Debezium Connect + MongoDB sink plugin
+    depends_on: [kafka, postgres, mongo]
+    ports: ["8083:8083"]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx2g"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports: ["8080:8080"]
+    depends_on: [kafka, connect]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
+      DYNAMIC_CONFIG_ENABLED: "true"

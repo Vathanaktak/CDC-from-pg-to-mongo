@@ -1,0 +1,221 @@
+{
+  "info": {
+    "_postman_id": "a90b432e-128f-41be-94df-6a3f9e2d3120",
+    "name": "CDC PostgreSQL to MongoDB (Kafka Connect)",
+    "description": "Postman collection to manage, register, test, and monitor Debezium PostgreSQL Source and MongoDB Sink connectors via the Kafka Connect REST API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "CONNECT_HOST",
+      "value": "http://localhost:8083",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health & Plugins",
+      "item": [
+        {
+          "name": "Check Kafka Connect Cluster Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": [""]
+            },
+            "description": "Returns Kafka Connect cluster version and commit hash."
+          }
+        },
+        {
+          "name": "List Available Connector Plugins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connector-plugins",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connector-plugins"]
+            },
+            "description": "Checks if io.debezium.connector.postgresql.PostgresConnector and com.mongodb.kafka.connect.MongoSinkConnector are properly installed in the classpath."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Register Connectors",
+      "item": [
+        {
+          "name": "Register pg-source (Debezium Postgres)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pg-source\",\n  \"config\": {\n    \"connector.class\": \"io.debezium.connector.postgresql.PostgresConnector\",\n    \"plugin.name\": \"pgoutput\",\n    \"database.hostname\": \"postgres\",\n    \"database.port\": \"5432\",\n    \"database.user\": \"postgres\",\n    \"database.password\": \"postgres\",\n    \"database.dbname\": \"demo\",\n    \"topic.prefix\": \"pg\",\n    \"table.include.list\": \"public.customers\",\n    \"tombstones.on.delete\": \"false\",\n    \"max.batch.size\": \"8192\",\n    \"max.queue.size\": \"32768\",\n    \"key.converter\": \"org.apache.kafka.connect.json.JsonConverter\",\n    \"key.converter.schemas.enable\": \"false\",\n    \"value.converter\": \"org.apache.kafka.connect.json.JsonConverter\",\n    \"value.converter.schemas.enable\": \"false\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors"]
+            },
+            "description": "Registers the Debezium PostgreSQL Source connector to stream WAL changes from the 'demo' database."
+          }
+        },
+        {
+          "name": "Register mongo-sink (MongoDB Sink)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"mongo-sink\",\n  \"config\": {\n    \"connector.class\": \"com.mongodb.kafka.connect.MongoSinkConnector\",\n    \"topics\": \"pg.public.customers\",\n    \"connection.uri\": \"mongodb://mongo:27017\",\n    \"database\": \"demo\",\n    \"collection\": \"customers\",\n    \"key.converter\": \"org.apache.kafka.connect.json.JsonConverter\",\n    \"key.converter.schemas.enable\": \"false\",\n    \"value.converter\": \"org.apache.kafka.connect.json.JsonConverter\",\n    \"value.converter.schemas.enable\": \"false\",\n    \"change.data.capture.handler\": \"com.mongodb.kafka.connect.sink.cdc.debezium.rdbms.postgres.PostgresHandler\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors"]
+            },
+            "description": "Registers the MongoDB Sink Connector to read CDC records from 'pg.public.customers' and apply them to MongoDB collection 'customers'."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Monitor & Verify",
+      "item": [
+        {
+          "name": "List Active Connectors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors"]
+            },
+            "description": "Returns array of registered connectors (e.g. ['pg-source', 'mongo-sink'])."
+          }
+        },
+        {
+          "name": "Get Status of All Connectors (Expanded)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors?expand=status&expand=info",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors"],
+              "query": [
+                {
+                  "key": "expand",
+                  "value": "status"
+                },
+                {
+                  "key": "expand",
+                  "value": "info"
+                }
+              ]
+            },
+            "description": "Detailed view showing whether tasks for all connectors are RUNNING, PAUSED, or FAILED."
+          }
+        },
+        {
+          "name": "Get pg-source Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/pg-source/status",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "pg-source", "status"]
+            },
+            "description": "Checks if connector state and task 0 state are RUNNING."
+          }
+        },
+        {
+          "name": "Get mongo-sink Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/mongo-sink/status",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "mongo-sink", "status"]
+            },
+            "description": "Checks if connector state and task 0 state are RUNNING."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Manage & Troubleshoot",
+      "item": [
+        {
+          "name": "Restart pg-source Task 0",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/pg-source/tasks/0/restart",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "pg-source", "tasks", "0", "restart"]
+            },
+            "description": "Restarts task 0 of pg-source if it encounters an error."
+          }
+        },
+        {
+          "name": "Restart mongo-sink Task 0",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/mongo-sink/tasks/0/restart",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "mongo-sink", "tasks", "0", "restart"]
+            },
+            "description": "Restarts task 0 of mongo-sink if it encounters an error."
+          }
+        },
+        {
+          "name": "Delete pg-source Connector",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/pg-source",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "pg-source"]
+            },
+            "description": "Deletes the pg-source connector from Kafka Connect."
+          }
+        },
+        {
+          "name": "Delete mongo-sink Connector",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{CONNECT_HOST}}/connectors/mongo-sink",
+              "host": ["{{CONNECT_HOST}}"],
+              "path": ["connectors", "mongo-sink"]
+            },
+            "description": "Deletes the mongo-sink connector from Kafka Connect."
+          }
+        }
+      ]
+    }
+  ]
+}
